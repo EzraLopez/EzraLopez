@@ -1,0 +1,47 @@
+# Redraws the contribution skyline every night and publishes skyline.svg to the
+# `output` branch, so main doesn't fill up with daily image commits.
+# Tool: https://github.com/pinkpixel-dev/skyline
+#
+# Pinned on purpose: skyline and setup-go are locked to commits that were read
+# and reviewed (2026-11-18). This job has write access to the repo, so don't
+# switch to @latest. To upgrade, review the new skyline commit, then change
+# SKYLINE_REF.
+name: skyline
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  SKYLINE_REF: 3542b1abda4e0ba444cc896114c2ef9aabe2f17b
+
+jobs:
+  skyline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: stable
+
+      - name: Draw skyline
+        env:
+          # Optional: a SKYLINE_TOKEN secret (classic PAT, read:user scope)
+          # includes private contributions. Falls back to the workflow token.
+          GITHUB_TOKEN: ${{ secrets.SKYLINE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: go run "github.com/pinkpixel-dev/skyline@${SKYLINE_REF}" -theme neon -weeks 26 -svg skyline.svg "${{ github.repository_owner }}"
+
+      - name: Publish to output branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir out && mv skyline.svg out/ && cd out
+          git init -q -b output
+          git add skyline.svg
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -qm "Update skyline"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" output
